@@ -1,0 +1,13 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+use Universa qw(Core);
+
+
+for(;;) {
+    my $core = Universa::Core->new(
+	subsystems => $config->{'subsystems'},
+	);
+}

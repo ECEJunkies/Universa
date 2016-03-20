@@ -19,8 +19,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x + $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x + $y);
 		},
 		],
 	},
@@ -30,8 +31,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x - $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x - $y);
 		},
 		],
 	},
@@ -41,8 +43,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y - $x);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y - $x);
 		},
 		],
 	},
@@ -52,8 +55,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x * $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x * $y);
 		},
 		],
 	},
@@ -63,8 +67,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x / $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x / $y);
 		},
 		],
 	},
@@ -74,8 +79,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y / $x);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y / $x);
 		},
 		],
 	},
@@ -85,8 +91,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x % $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x % $y);
 		},
 		],
 	},
@@ -96,8 +103,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y % $x);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y % $x);
 		},
 		],
 	},
@@ -107,8 +115,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my $x = $forth->peek_ps(1) or return;
-		    $forth->push_ps($x);
+		    my $session = shift;
+		    my $x = $session->peek_ps(1) or return;
+		    $session->push_ps($x);
 		},
 		],
 	},
@@ -118,7 +127,8 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my $x = $forth->pop_ps(1) or return;
+		    my $session = shift;
+		    my $x = $session->pop_ps(1) or return;
 		    print $x . "\n";
 		},
 		],
@@ -129,8 +139,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y, $x);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y, $x);
 		},
 		],
 	},
@@ -140,8 +151,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y, $z) = $forth->pop_ps(3) or return;
-		    $forth->push_ps($z, $x, $y);
+		    my $session = shift;
+		    my ($x, $y, $z) = $session->pop_ps(3) or return;
+		    $session->push_ps($z, $x, $y);
 		},
 		],
 	},
@@ -151,9 +163,10 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y, $z) = $forth->pop_ps(3)
+		    my $session = shift;
+		    my ($x, $y, $z) = $session->pop_ps(3)
 			or return warn "Error\n";
-		    $forth->push_ps($y, $z, $x);
+		    $session->push_ps($y, $z, $x);
 		},
 		],
 	},
@@ -163,8 +176,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($x, $y, $x);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($x, $y, $x);
 		},
 		],
 	},
@@ -174,8 +188,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y);
 		},
 		],
 	},
@@ -185,8 +200,44 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($x, $y) = $forth->pop_ps(2) or return;
-		    $forth->push_ps($y, $x, $y);
+		    my $session = shift;
+		    my ($x, $y) = $session->pop_ps(2) or return;
+		    $session->push_ps($y, $x, $y);
+		},
+		],
+	},
+
+	# a -- nil:
+	'drop' => {
+	    codeword => 'code',
+	    params   => [
+		sub {
+		    my $session = shift;
+		    my $x = $session->pop_ps(1) or return;
+		},
+		],
+	},
+
+	# a -- a + 1
+	'++' => {
+	    codeword => 'code',
+	    params => [
+		sub {
+		    my $session = shift;
+		    my $x = $session->pop_ps(1) or return;
+		    $session->push_ps($x + 1);
+		},
+		],
+	},
+
+	# a -- a - 1
+	'--' => {
+	    codeword => 'code',
+	    params => [
+		sub {
+		    my $session = shift;
+		    my $x = $session->pop_ps(1) or return;
+		    $session->push_ps($x - 1);
 		},
 		],
 	},
@@ -197,11 +248,12 @@ sub populate {
 	    codeword => 'code',
 	    params => [
 		sub {
-		    $forth->{'mode'} = 'collect';
-		    $forth->{'_catch'} = [
+		    my $session = shift;
+		    $session->{'imode'} = 'collect';
+		    $session->{'_catch'} = [
 			'"s' => sub {
 			    my $data = shift;
-			    $forth->push_ps($data);
+			    $session->push_ps($data);
 			},
 			],
 		},
@@ -214,8 +266,9 @@ sub populate {
 	    codeword => 'code',
 	    params => [
 		sub {
-		    $forth->{'mode'} = 'collect';
-		    $forth->{'_catch'} = [
+		    my $session = shift;
+		    $session->{'imode'} = 'collect';
+		    $session->{'_catch'} = [
 			'".' => sub {
 			    my $data = shift;
 			    print $data . "\n";

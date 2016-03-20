@@ -10,27 +10,34 @@ use Data::Dumper;
 
 
 sub populate {
-    my ($self, $forth, $store) = @_;
+    my ($self, $forth) = @_;
+
+    die "This dictionary requires the datastore feature from Universa::DataStore \n"
+	unless $forth->feature('datastore');
 
     {
 	'dump' => {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my $k = $forth->pop_ps(1) or return;
-		    my $data = $store->fetch_key($k)
+		    my $session = shift;
+		    my $k = $session->pop_ps(1) or return;
+		    my $data = $forth->fetch_key($k)
 			or return $forth->error("can't find key");
 		    print Dumper $data;
 		},
 		],
 	},
 
+
 	'set' => {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($key, $value) = $forth->pop_ps(2) or return;
-		    $store->set_key($key, $value);
+		    my $session = shift;
+		    use Data::Dumper; print Dumper $session;
+		    my ($key, $value) = $session->pop_ps(2) or return;
+		    $forth->set_key($key, $value);
 		},
 		],
 	},
@@ -40,7 +47,7 @@ sub populate {
 	    params   => [
 		sub {
 		    my $key = $forth->pop_ps(1) or return;
-		    my $value = $store->fetch_key($key)
+		    my $value = $forth->fetch_key($key)
 			or return $forth->error("can't find key");
 		    $forth->push_ps($value);
 		},
@@ -51,10 +58,11 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my $key = $forth->pop_ps(1) or return;
-		    my $value = $store->fetch_key($key)
+		    my $session = shift;
+		    my $key = $session->pop_ps(1) or return;
+		    my $value = $forth->fetch_key($key)
 			or return $forth->error("can't find key");
-		    $forth->push_ps(encode_json($value));
+		    $session->push_ps(encode_json($value));
 		},
 		],
 	},
@@ -63,8 +71,9 @@ sub populate {
 	    codeword => 'code',
 	    params   => [
 		sub {
-		    my ($key, $value) = $forth->pop_ps(2) or return;
-		    $store->set_key($key, decode_json($value));
+		    my $session = shift;
+		    my ($key, $value) = $session->pop_ps(2) or return;
+		    $forth->set_key($key, decode_json($value));
 		},
 		],
 	},

@@ -1,21 +1,24 @@
 #!/usr/bin/env perl
+package Universa::datastore;
 
 use warnings;
 use strict;
 
 use FindBin qw($Bin);
 use lib "$Bin/lib";
+use Universa::FORTH;
+use Universa::FORTH::Plugin::DataStore;
+use Devel::Confess;
+use Die::Hard;
 
-use Universa::DataStore;
+my %heap = ();
 
 
-my $datastore = Universa::DataStore->new;
-$datastore->start_server(
-    LocalPort => 9003,
-    LocalAddr => 'localhost',
-    ReuseAddr => 1,
-    Listen    => 20,
-    Blocking  => 1,
-    );
+for(;;) {
+my $hardened  = Universa::FORTH->new; # Interpreter stored elsewhere
+#my $hardened = Die::Hard->new($session);
+$hardened->add_plugin(Universa::FORTH::Plugin::DataStore->new(Heap => \%heap));
+$hardened->repl;
+}
 
-1;
+exit;

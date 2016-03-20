@@ -5,28 +5,28 @@ package Universa::DataStore;
 use warnings;
 use strict;
 
-use Universa::DataStore::Server;
 use Universa::FORTH;
 use Universa::FORTH::DataDict;
-use IO::Socket::IP;
-use IPC::Shareable qw(:lock);
+
+use base 'Universa::FORTH::Plugin';
 
 
-my %heap = ();
-tie %heap, 'IPC::Shareable';
+# The construction operations for Universa::FORTH inherited objects are sort of
+# non-traditional, but they seem to work ok:
+sub new {
+    my ($class, %params) = @_;
+    my $forth = __PACKAGE__->_new;
 
-sub new { bless { 
-    'hooks' => {}, # For creating channels and event callbacks
-}, shift }
+    # We squeeze our own little selfies here:
+    $forth->{'__ds__'}->{'heap'}  = $params{'Heap'} || {};
+    $forth->{'__ds__'}->{'allow_save'} = $params{'AllowSave'} || 1;
+    $forth->{'__ds__'}->{'hooks'} = {};
 
-# Fetch the value of a specified key via . notation:
-sub fetch_key {
-    my ($self, $key) = @_;
-
-    my $r = \%heap;
-    $r = $r->{$_} for split /\./, $key, $r;
-    $r;
+    push @{ $forth->{'features'} }, 'datastore';
+    $forth->add_dictionary(Universa::FORTH::DataDict->new($forth));
+    $forth;
 }
+
 
 # This will create an entry in $self->{'hooks'}. Whenever a client
 # updates this entry, everyone will be notified. This can be useful
@@ -55,10 +55,27 @@ sub set_key {
     my @path = split /\./, $key;
     
     my $last = pop @path;
-    my $targ = \%heap;
+    my $targ = $self->{'__ds__'}->{'heap'};
     
     $targ = $targ->{$_} ||= {} for @path;
     $targ->{$last} = $value;
+}
+
+# Fetch the value of a specified key via . notation:
+sub fetch_key {
+    my ($self, $key) = @_;
+
+    my @path = split /\./, $key;
+
+    my $last = pop @path;
+    my $targ = $self->{'__ds__'}->{'heap'};
+
+    $targ = $targ->{$_} ||= {} for @path;
+
+    use Data::Dumper;
+    print Dumper $targ;
+    print $last;
+    $targ->{$last};
 }
 
 sub client_connected {
@@ -71,38 +88,8 @@ sub client_connected {
 
     # Create a FORTH interpreter for the client:
     my $forth = Universa::FORTH->new;
-    $forth->add_dictionary(Universa::FORTH::DataDict->new(\%heap), $self);
+    $forth->add_dictionary(Universa::FORTH::DataDict->new($self->{'heap'}), $self);
     $forth->repl;
 }
 
-# Clearly the intended purpose of this entire project. A forking
-# server that provides a FORTH shell to each client, with central
-# access to the data heap:
-sub start_server {
-    my ($self, %params) = @_;
-
-    my $listener = IO::Socket::IP->new(%params)
-	or die "Can't create socket: $!\n";
-    $self->{'_listener'} = $listener;
-
-    # We may need to do some better network handling here..
-    while (my $client = $listener->accept) {
-	my $pid;
-
-	while (not defined ($pid = fork)) {}
-	$self->client_connected($client) if $pid;
-    }
-}
-
-# For debugging / interactive purposes, throw the user into a
-# Read Eval Print Loop with the data store dictionary set:
-sub run {
-    my $self = shift;
-
-    my $forth = Universa::FORTH->new;
-    $forth->add_dictionary(Universa::FORTH::DataDict->new(\%heap), $self);
-    $forth->repl;
-}
-
-__PACKAGE__->new->run unless caller;
 1;

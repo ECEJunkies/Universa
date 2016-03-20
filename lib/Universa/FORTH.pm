@@ -6,70 +6,81 @@ use strict;
 no warnings 'experimental::smartmatch';
 
 use Universa::FORTH::Words;
+use Universa::FORTH::Session;
 use Carp 'croak';
 use Scalar::Util;
+use List::Util 'first';
 
+#use Devel::Confess;
 
-# The constructor is not all that special here, but it will do for
-# the moment:
+# Safety first (before GD):
+END {
+    undef our $INTERPRETER;
+}
+
+# The real constructor is not all that special here: 
 sub new {
     my ($class, %params) = @_;
 
-    # Parameters:
-    my $datastore = delete $params{'store'};
+    # If the core interpreter is not yet already set up, do so:
+    our $INTERPRETER ||= _new_interpreter($class, %params);
+
+    # Instead of providing the client with the interpreter, provide them with a new
+    # session that can access it. There is a strange bug here we need to watch out
+    # for. apparently we can't pass parameters to new because they dissapear:
+    my $session = Universa::FORTH::Session->new;
+    $session->{'_link'} = $INTERPRETER;
+    $session;
+}
+
+# This shouldn't be called directly, but it is here just in case:
+sub _new_interpreter {
+    my $class = shift;
 
     my $self = {
-	'_ps'     => [],    # Parameter stack
-	'_psp'    => 0,     # Parameter stack pointer
-	'active'  => 1,     # Outer interpreter running state
-	'dict'    => {},    # Dictionary
-	'heap'    => $params{'heap'} || {}, # Data heap
+	'dict'    => {},    # Global dictionary
 	'builtin' => {},    # Builtin words here (code and eval)
-	'mode'    => 'interpret',
-	'catch'   => '',    # For collect mode
-	'store'   => $datastore || undef, # Datastore object ref
+	'feature' => {},    # Additional feature references (eg. datastore)
     };
+    
+    my $interpreter = bless $self, $class;
+    $interpreter->cold; # Load builtins and the provided base dictionary
+    $interpreter;
+}
 
-    my $object = bless $self, $class;
-    $object->cold; # Load builtins and the provided base dictionary
-    return $object;
+# feature() returns a true value if an array element in $self->{'feature'} contains
+# that string. It is intended to be used by dictionaries which depend on code not
+# provided by this module to help ensure that their environment is sane:
+sub feature {
+    my ($self, $feature) = @_;
+
+    # We only need to find a feature once:
+    return 0 unless exists($self->{'feature'}->{$feature});
 }
 
 # Just an error throwing helper:
 sub error {
     my ($self, $message) = @_;
     print "error ($message)\n";
-    0;
 }
 
-# We used to handle stack pointers here, but I think they can be
-# ignored now. I am leaving these helper functions here since they
-# clean the code up a bit:
-sub push_ps {
-    my ($self, @values) = @_;
-    croak 'push_ps requires an argument' unless @values;
-    push @{ $self->{'_ps'} }, @values;
-}
+# The answer I came up with to better handle additional dictionary entries, etc
+# was to support a simple plugin system. Before, mpodules would have to inherit
+# Universa::FORTH which was a bit messy:
+sub add_plugin {
+    my ($self, $object) = @_;
+    my $package = ref $object;
 
-# Can pop off more than one value. This will speed up  accesses to
-# the stack, i.e. my ($num1, $num2) = $self->pop_ps(2); - It should
-# also make it easier to handle errors:
-sub pop_ps {
-    my ($self, $values) = @_;
-    return $self->error('Stack is not large enough for pop operation')
-	unless @{ $self->{'_ps'} } >= ($values);
-    return splice @{ $self->{'_ps'} }, (-1 * ($values ));
-}
+    $object->isa('Universa::FORTH::Plugin')
+	or die "Plugin '$package' must inherit 'Universa::Forth::Plugin\n";
 
-# peek_ps() will peer into the parameter stack and return values
-# without removing them:
-sub peek_ps {
-    my ($self, $values, $offset) = @_;
-    return $self->error('Stack is not large enough for peek operation')
-	unless @{ $self->{'_ps'} } >= ($values);
-    $offset ||= 0;
-    return (reverse @{ $self->{'_ps'} })[$offset .. ($values - 1)];
-    
+    # All plugins must have a name to identify them as a 'feature':
+    my $name = $object->name or die "Plugin '$package$' must have a name\n";
+    return warn "Plugin '$package' already loaded\n"
+	if $self->{'feature'}->{$name};
+    $self->{'feature'}->{$name} = $object; # Store it!
+
+    $object->plugin_init($self);
 }
 
 # The first thing ever run when a FORTH interpreter is being born
@@ -82,18 +93,18 @@ sub cold {
     # The eval core word accepts a string of Perl code and
     # evaluates it when the word is processed:
     $self->{'builtin'}->{'eval'} = sub {
-	my $code = shift;
+	my ($session, $code) = @_;
 
-	eval $code;
+	eval $code; # TODO: carry $session.
 	print $@ if $@;
     };
 
     # Most builtin words will use the code core word. The only
     # difference is that it accepts a code reference:
     $self->{'builtin'}->{'code'} = sub {
-	my $coderef = shift;
+	my ($session, $coderef) = @_;
 
-	$coderef->(@_);
+	$coderef->($session, @_);
     };
 
     # Provide the builtin dictionary:
@@ -103,37 +114,41 @@ sub cold {
 # forth_exec() is just a dispatcher, more than anything. The real
 # work is mostly done by the forth modes:
 sub forth_exec {
-    my ($self, $chunk) = @_;
-    
+    my ($self, $session, $chunk) = @_;
+
     while ($$chunk) {
-	for ($self->{'mode'}) {
-	    when (/^interpret$/) { $self->interpret($chunk) }
-	    when (/^collect$/)   { $self->collect($chunk)   }
+	for ($session->{'imode'}) {
+	    when (/^interpret$/) { $self->interpret($session, $chunk) }
+	    when (/^collect$/)   { $self->collect($session, $chunk)   }
 	}
     }
+
+    # Return a reference to the parameter stack. This is really just to help
+    # make code a bit easier during implementation:
+    $session->{'_ps'};
 }
 
 # collect() is responsible for string support; It could be used for
 # more. Its' job is to load in alphanumeric characters until it
 # hits a 'catch_word' thrown into $self->{'_catch'}:
 sub collect {
-    my ($self, $chunk) = @_;
+    my ($self, $session, $chunk) = @_;
 
-    my $catch_word = $self->{'_catch'}->[0];
+    my $catch_word = $session->{'_catch'}->[0];
     $$chunk =~ /(.*)\s$catch_word/;
-    $self->{'_catch'}->[1]->($1) if $1;
+    $session->{'_catch'}->[1]->($1) if $1;
     $$chunk = (split /\s$catch_word/, $$chunk, 2)[1];
-    $self->{'mode'} = 'interpret';
+    $session->{'imode'} = 'interpret';
 }
 
 # Builtins are words provided to us that are defined in the
 # dictionary. Oddly enough, this function can also be used to
 # run user defined 'colon' definitions as well:
 sub run_builtin {
-    my ($self, $word) = @_;
+    my ($self, $session, $word) = @_;
 
     $self->{'builtin'}->{$self->{'dict'}->{$word}->{'codeword'}}->(
-	@{ $self->{'dict'}->{$word}->{'params'} }
+	$session, @{ $self->{'dict'}->{$word}->{'params'} }
     );
 }
 
@@ -141,19 +156,19 @@ sub run_builtin {
 # handle the execution of builtins and core words, as well as
 # bareword literals:
 sub interpret {
-    my ($self, $chunk) = @_;
+    my ($self, $session, $chunk) = @_;
     
     if ( (my $word, $$chunk) = split ' ', $$chunk, 2 ) {
 
 	# Run a builtin, if possible (See above):
 	if ( exists($self->{'dict'}->{$word}) ) {
-	    $self->run_builtin($word);
+	    $self->run_builtin($session, $word);
 	    return;
 	}
 
         # Literals allow for us to perform arithmetic:
 	if ( Scalar::Util::looks_like_number($word) ) {
-	    push @{ $self->{'_ps'} }, $word;
+	    push @{ $session->{'_ps'} }, $word;
 	    return;
 	}
 	
@@ -161,7 +176,7 @@ sub interpret {
 	# For example, .squirrel:
 	if ($word =~ /^\./) {
 	    $word = unpack "xA*", $word; # Remove leading period
-	    push @{ $self->{'_ps'} }, $word;
+	    push @{ $session->{'_ps'} }, $word;
 	    return;
 	}
 
@@ -197,22 +212,29 @@ sub add_word {
 # This executes if we run this module as a standalone script.
 # It can be useful for interactive testing of the FORTH
 # interpreter and such:
-sub run { shift->repl }
+sub run {
+
+    my $session = __PACKAGE__->new;
+    $session->repl;
+}
 
 sub repl {
-    my $self = shift;
+    my ($self, $session) = @_;
     
-    while ($self->{'active'}) {
-	
-	print  "> ";
-	my $chunk = <STDIN>;
+    while ($session->{'active'}) {
+
+	my $in_handle  = $session->{'in_handle'};
+	my $out_handle = $session->{'out_handle'};
+
+	print $out_handle "> ";
+	my $chunk = <$in_handle>;
 	chomp $chunk;
 	$chunk =~ s/^\s+|\s+$//; # Trim
 	next unless $chunk;
 	
-	$self->forth_exec(\$chunk);
-	print "ok [@{[join ', ', @{ $self->{'_ps'} } ]}]\n"; # Stack status
+	$self->forth_exec($session, \$chunk);
+	print $out_handle "ok [@{[join ', ', @{ $session->{'_ps'} } ]}]\n"; # Stack status
     }
 }
 
-__PACKAGE__->new->run unless caller;
+__PACKAGE__->run unless caller; # We can't use :: here.... at least not right now
