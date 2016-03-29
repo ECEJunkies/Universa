@@ -18,6 +18,7 @@ sub new {
 	'imode'  => 'interpret', # Interpreter mode
 	'catch'  => '',          # For collect mode
 	'_link'  => undef,       # Reference to the interpreter
+	'_obuf'  => '',          # Output buffer
 
 	# IO stuff (allows the interpreter to control session IO):
 	'in_handle'  => delete $params{'inHandle'}  || \*STDIN,
@@ -27,10 +28,23 @@ sub new {
     bless $self, $class;
 }
 
+# Because FORTH shouldn't keep track of input & output handles:
+sub out {
+    my ($self, $data) = @_;
+
+    $self->{'_obuf'} .= $data;
+}
+
 sub push_ps {
     my ($self, @values) = @_;
     croak 'push_ps requires an argument' unless @values;
     push @{ $self->{'_ps'} }, @values;
+}
+
+sub on_publish {
+    my $self = shift;
+
+    
 }
 
 # These helper functions can pop off more than one value. This will speed up

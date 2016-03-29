@@ -7,7 +7,7 @@ use strict;
 
 use Universa::FORTH;
 use Universa::FORTH::DataDict;
-
+use Data::UUID;
 use base 'Universa::FORTH::Plugin';
 
 
@@ -93,7 +93,9 @@ package Universa::FORTH::Plugin::DataStore::Dictionary;
 
 use warnings;
 use strict;
+no warnings 'experimental::smartmatch';
 
+use v5.18;
 use Universa::FORTH::Dictionary;
 use base 'Universa::FORTH::Dictionary';
 use JSON qw(encode_json decode_json);
@@ -115,7 +117,7 @@ sub populate {
 		    my $k = $session->pop_ps(1) or return;
 		    my $data = $store->fetch_key($k)
 			or return $forth->error("can't find key");
-		    print Dumper $data;
+		    $session->out(Dumper $data);
 		},
 		],
 	},
@@ -168,6 +170,54 @@ sub populate {
 		},
 		],
 	},
+
+	'count' => {
+	    codeword => 'code',
+	    params   => [
+		sub {
+		    my $session = shift;
+		    my $key = $session->pop_ps(1) or return;
+		    my $_key = $store->fetch_key($key)
+			or return $forth->error("can't find key");
+		    for (ref $_key ) {
+			when (/^HASH$/) {
+			    $session->push_ps(scalar keys $_key);
+			};
+			when (/^ARRAY$/) {
+			    $session->push_ps( scalar @{ $_key } );
+			};
+		    }
+		},
+		],
+	},
+
+	'sub'  => {
+	    codeword => 'code',
+	    params   => [
+		sub {
+		    my $session = shift;
+		    my $key = $session->pop_ps(1) or return;
+		    my $_key = $store->fetch_key($key)
+			or return $forth->error("Can't find key");
+		    $store->{'heap'}->{'_system'}->{'sub'}->{$key} ||= [];
+		    push @{ $store->{'heap'}->{'_system'}->{'sub'}->{$key} }, $session;
+		},
+		],
+	},
+
+	'unsub' => {
+	    codeword => 'code',
+	    params   => [
+		sub {
+		    my $session = shift;
+		    my $key = $session->pop_ps(1) or return;
+		    my $_key = $store->fetch_key($key)
+			or return $forth->error("Can't find key");
+		    delete $store->{'heap'}->{'_system'}->{'sub'}->{$key}
+		    or $forth->error("Subscription doesn't exist");
+		},
+		],
+	}
     };
 }
 

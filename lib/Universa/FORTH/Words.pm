@@ -129,7 +129,7 @@ sub populate {
 		sub {
 		    my $session = shift;
 		    my $x = $session->pop_ps(1) or return;
-		    print $x . "\n";
+		    $session->out($x . "\n");
 		},
 		],
 	},
@@ -271,7 +271,7 @@ sub populate {
 		    $session->{'_catch'} = [
 			'".' => sub {
 			    my $data = shift;
-			    print $data . "\n";
+			    $session->out($data);
 			},
 			],
 		},

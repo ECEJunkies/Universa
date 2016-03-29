@@ -1,24 +1,93 @@
 #!/usr/bin/env perl
-package Universa::datastore;
 
 use warnings;
 use strict;
 
 use FindBin qw($Bin);
 use lib "$Bin/lib";
-use Universa::FORTH;
-use Universa::FORTH::Plugin::DataStore;
+use IO::Async::Loop;
+use IO::Async::Stream;
+
 use Devel::Confess;
-use Die::Hard;
 
 my %heap = ();
 
 
-for(;;) {
-my $hardened  = Universa::FORTH->new; # Interpreter stored elsewhere
-#my $hardened = Die::Hard->new($session);
-$hardened->add_plugin(Universa::FORTH::Plugin::DataStore->new(Heap => \%heap));
-$hardened->repl;
-}
+my $loop = IO::Async::Loop->new;
+my $listener = DataServer->new;
+$loop->add($listener);
 
-exit;
+$listener->listen(
+    service  => 9603,
+    socktype => 'stream',
+    )->on_done(
+    sub {
+	my $listener = shift;
+	my $so = $listener->read_handle;
+
+	printf STDERR "Listening on %s:%d\n",
+	$so->sockhost, $so->sockport;
+
+	
+	Universa::FORTH->new->add_plugin(
+	    Universa::FORTH::Plugin::DataStore->new(Heap => \%heap));
+    })->get;
+
+exit $loop->run;
+
+
+package DataServer;
+
+use warnings;
+use strict;
+
+use base 'IO::Async::Listener';
+use Universa::FORTH;
+use Universa::FORTH::Plugin::DataStore;
+
+my @clients;
+
+sub on_stream {
+    my ($self, $stream) = @_;
+
+    my $so        = $stream->read_handle;
+    my $peer_addr = $so->peerhost . ':' . $so->peerport;
+
+    $stream->configure(
+	on_read => sub {
+	    my ($self, $buffer, $eof) = @_;
+
+	    # REPL:
+	    while( $$buffer =~ s/^(.*\n)// ) {
+		my $chunk = $1;
+		chomp $chunk;
+		$chunk =~ s/^\s+|\s+$//; # Trim
+		next unless $chunk;
+		my $session = $self->{'__forth'};
+		$session->forth_exec(\$chunk);
+
+		$self->write($session->{'_obuf'});
+		$session->{'_obuf'} = '';
+		$self->write("ok [@{[join ', ', @{ $session->{'_ps'} } ]}]\n> ");
+	    }
+
+	    0;
+	},
+	on_closed => sub {
+	    my $self = shift;
+	    @clients = grep { $_->{'stream'} != $self } @clients;
+	},
+	);
+
+    $loop->add($stream);
+    push @clients, $stream;
+
+    my $session = Universa::FORTH->new(
+	inHandle  => $stream->read_handle,
+	outHandle => $stream->write_handle,
+	);
+	
+    # TODO: Clean this up:
+    $stream->{'__forth'} = $session;
+    $stream->write('> ');
+}

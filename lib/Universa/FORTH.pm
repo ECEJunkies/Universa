@@ -11,7 +11,6 @@ use Carp 'croak';
 use Scalar::Util;
 use List::Util 'first';
 
-#use Devel::Confess;
 
 # Safety first (before GD):
 END {
