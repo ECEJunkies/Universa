@@ -276,6 +276,19 @@ sub populate {
 			],
 		},
 		],
+	},
+
+	# TODO: Remove this and put it in its' own plugin:
+	'temp' => {
+	    codeword => 'code',
+	    params   => [
+		sub {
+		    my $session = shift;
+		    my $temp = `i2cget -y 1 0x4b 0 b` || '0';
+		    $temp = unpack('c', $temp) unless $temp eq '0';
+		    $session->push_ps($temp);
+		},
+		],
 	}
     }
 }
