@@ -286,7 +286,7 @@ sub populate {
 		    my $session = shift;
 		    my $temp = `i2cget -y 1 0x4b 0 b` || '0';
 		    chomp $temp;
-		    $session->push_ps(sprintf( "%x", int($temp)));
+		    $session->push_ps(hex $temp);
 		},
 		],
 	}
